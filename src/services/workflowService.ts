@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { Workflow, WorkflowRun } from "@/lib/types";
 import { toast } from "sonner";
@@ -112,7 +113,7 @@ export async function createWorkflow(workflow: Omit<Workflow, "id" | "createdAt"
 
     console.log("Workflow created successfully:", data);
     toast.success("Workflow created successfully");
-    
+
     return {
       id: data.id,
       name: data.name,
@@ -139,7 +140,7 @@ export async function updateWorkflow(id: string, workflow: Partial<Omit<Workflow
   try {
     console.log(`Updating workflow with ID ${id}:`, workflow);
     const updateData: any = {};
-    
+
     if (workflow.name) updateData.name = workflow.name;
     if (workflow.description !== undefined) updateData.description = workflow.description;
     if (workflow.version) updateData.version = workflow.version;
@@ -164,7 +165,7 @@ export async function updateWorkflow(id: string, workflow: Partial<Omit<Workflow
 
     console.log("Workflow updated successfully:", data);
     toast.success("Workflow updated successfully");
-    
+
     return {
       id: data.id,
       name: data.name,
@@ -287,7 +288,7 @@ export async function createWorkflowRun(workflowId: string, version: string): Pr
     }
 
     toast.success("Workflow execution started");
-    
+
     return {
       id: data.id,
       workflowId: data.workflow_id,
@@ -316,7 +317,7 @@ export async function updateWorkflowRun(
   try {
     console.log(`Updating run ${runId}:`, updates);
     const updateData: any = {};
-    
+
     if (updates.status) updateData.status = updates.status;
     if (updates.endTime) updateData.end_time = updates.endTime;
     if (updates.nodeRuns) updateData.node_runs = updates.nodeRuns;
@@ -342,7 +343,7 @@ export async function updateWorkflowRun(
         .select("workflow_id")
         .eq("id", runId)
         .single();
-        
+
       if (runData) {
         await supabase
           .from("workflows")
@@ -358,7 +359,7 @@ export async function updateWorkflowRun(
     } else if (updates.status === "cancelled") {
       toast.info("Workflow execution cancelled");
     }
-    
+
     return {
       id: data.id,
       workflowId: data.workflow_id,
@@ -372,5 +373,36 @@ export async function updateWorkflowRun(
     console.error(`Error updating run ${runId}:`, error);
     toast.error(`Failed to update workflow run: ${error.message || "Unknown error"}`);
     return null;
+  }
+}
+
+// Fetch processed data
+export async function fetchProcessedData(workflowRunId?: string, limit = 10) {
+  try {
+    console.log(`Fetching processed data${workflowRunId ? ` for run ${workflowRunId}` : ''}...`);
+    
+    let query = supabase
+      .from("processed_data")
+      .select("*")
+      .order("processed_at", { ascending: false })
+      .limit(limit);
+    
+    if (workflowRunId) {
+      query = query.eq("workflow_run_id", workflowRunId);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error("Error fetching processed data:", error);
+      throw error;
+    }
+    
+    console.log(`Fetched ${data.length} processed data records`);
+    return data;
+  } catch (error) {
+    console.error("Error fetching processed data:", error);
+    toast.error(`Failed to fetch processed data: ${error.message || "Unknown error"}`);
+    return [];
   }
 }
