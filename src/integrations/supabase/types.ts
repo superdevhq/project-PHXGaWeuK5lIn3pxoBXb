@@ -9,7 +9,95 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      workflow_runs: {
+        Row: {
+          created_at: string
+          end_time: string | null
+          id: string
+          node_runs: Json
+          start_time: string
+          status: string
+          updated_at: string
+          version: string
+          workflow_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          node_runs?: Json
+          start_time?: string
+          status?: string
+          updated_at?: string
+          version: string
+          workflow_id: string
+        }
+        Update: {
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          node_runs?: Json
+          start_time?: string
+          status?: string
+          updated_at?: string
+          version?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_runs_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflows: {
+        Row: {
+          created_at: string
+          description: string | null
+          edges: Json
+          id: string
+          last_run_at: string | null
+          name: string
+          nodes: Json
+          schedule: Json | null
+          status: string
+          tags: string[] | null
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          edges: Json
+          id?: string
+          last_run_at?: string | null
+          name: string
+          nodes: Json
+          schedule?: Json | null
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          edges?: Json
+          id?: string
+          last_run_at?: string | null
+          name?: string
+          nodes?: Json
+          schedule?: Json | null
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
