@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Workflow, WorkflowRun } from "@/lib/types";
 import { toast } from "sonner";
@@ -272,29 +271,20 @@ export async function createWorkflowRun(workflowId: string, version: string): Pr
       .update({ status: "running", last_run_at: new Date().toISOString() })
       .eq("id", workflowId);
 
-    // For now, we'll simulate a successful run without calling the edge function
-    // This is temporary until we get the edge function working
-    setTimeout(async () => {
-      try {
-        console.log(`Simulating successful completion of workflow ${workflowId}`);
-        await supabase
-          .from("workflow_runs")
-          .update({ 
-            status: "success", 
-            end_time: new Date().toISOString() 
-          })
-          .eq("id", data.id);
-        
-        await supabase
-          .from("workflows")
-          .update({ status: "active" })
-          .eq("id", workflowId);
-        
-        toast.success("Workflow execution completed successfully");
-      } catch (simulationError) {
-        console.error("Error in workflow simulation:", simulationError);
-      }
-    }, 5000);
+    // Call the edge function to execute the workflow
+    console.log(`Invoking run-workflow edge function for workflow ${workflowId}, run ${data.id}`);
+    const { data: executionData, error: executionError } = await supabase.functions.invoke("run-workflow", {
+      body: { workflowId, runId: data.id },
+    });
+
+    if (executionError) {
+      console.error("Error invoking workflow execution:", executionError);
+      toast.error(`Error starting workflow execution: ${executionError.message || "Unknown error"}`);
+      // We don't throw here because the run has been created
+      // The edge function will handle updating the status
+    } else {
+      console.log("Edge function response:", executionData);
+    }
 
     toast.success("Workflow execution started");
     
