@@ -1,36 +1,28 @@
 
-export type NodeStatus = 
-  | 'idle' 
-  | 'running' 
-  | 'success' 
-  | 'failed' 
-  | 'pending' 
-  | 'skipped';
+// Node position type
+export interface Position {
+  x: number;
+  y: number;
+}
 
-export type NodeType = 
-  | 'task' 
-  | 'container' 
-  | 'decision' 
-  | 'trigger' 
-  | 'sensor' 
-  | 'resource';
+// Node configuration type
+export interface NodeConfig {
+  [key: string]: any;
+}
 
+// Workflow node type
 export interface WorkflowNode {
   id: string;
   name: string;
-  type: NodeType;
-  status: NodeStatus;
-  position: {
-    x: number;
-    y: number;
-  };
-  config: Record<string, any>;
+  type: "trigger" | "task" | "decision" | "action";
+  status: "idle" | "running" | "success" | "failed" | "pending";
+  position: Position;
+  config: NodeConfig;
   dependencies: string[];
-  retries?: number;
-  timeout?: number;
   description?: string;
 }
 
+// Workflow edge type
 export interface WorkflowEdge {
   id: string;
   source: string;
@@ -38,6 +30,14 @@ export interface WorkflowEdge {
   condition?: string;
 }
 
+// Workflow schedule type
+export interface WorkflowSchedule {
+  cron: string;
+  timezone?: string;
+  enabled?: boolean;
+}
+
+// Workflow type
 export interface Workflow {
   id: string;
   name: string;
@@ -45,49 +45,39 @@ export interface Workflow {
   version: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-  schedule?: {
-    cron?: string;
-    interval?: string;
-    startDate?: string;
-    endDate?: string;
-  };
+  schedule?: WorkflowSchedule;
   tags?: string[];
   createdAt: string;
   updatedAt: string;
   lastRunAt?: string;
-  status: 'active' | 'inactive' | 'running' | 'failed';
+  status: "active" | "inactive" | "running" | "failed";
 }
 
+// Workflow run node status
+export interface NodeRun {
+  nodeId: string;
+  startTime: string;
+  endTime?: string;
+  status: "running" | "success" | "failed";
+  output?: any;
+  error?: string;
+}
+
+// Workflow run type
 export interface WorkflowRun {
   id: string;
   workflowId: string;
   version: string;
   startTime: string;
   endTime?: string;
-  status: 'running' | 'success' | 'failed' | 'cancelled';
-  nodeRuns: {
-    nodeId: string;
-    startTime: string;
-    endTime?: string;
-    status: NodeStatus;
-    logs?: string[];
-    metrics?: Record<string, number>;
-  }[];
+  status: "running" | "success" | "failed" | "cancelled";
+  nodeRuns: NodeRun[];
 }
 
+// User type
 export interface User {
   id: string;
-  name: string;
   email: string;
-  avatar?: string;
-  role: 'admin' | 'developer' | 'viewer';
-}
-
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  read: boolean;
-  createdAt: string;
+  name?: string;
+  avatarUrl?: string;
 }

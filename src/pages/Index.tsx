@@ -1,17 +1,21 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ReactFlowProvider } from "reactflow";
 import { Workflow, WorkflowNode } from "@/lib/types";
 import Header from "@/components/Header";
 import SidebarNav from "@/components/Sidebar";
 import WorkflowCanvas from "@/components/workflows/WorkflowCanvas";
+import WorkflowList from "@/components/workflows/WorkflowList";
+import WorkflowRunsList from "@/components/workflows/WorkflowRunsList";
 import MonitoringPanel from "@/components/monitoring/MonitoringPanel";
 import { Button } from "@/components/ui/button";
-import { Clock, Play, Plus } from "lucide-react";
+import { Clock, Play, Plus, Loader2, LayoutGrid, List } from "lucide-react";
+import { fetchWorkflows, createWorkflow } from "@/services/workflowService";
+import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Sample workflow data
-const sampleWorkflow: Workflow = {
-  id: "wf-1",
+// Sample workflow data for creating a new workflow
+const sampleWorkflow: Omit<Workflow, "id" | "createdAt" | "updatedAt"> = {
   name: "Data Processing Pipeline",
   description: "Extract, transform, and load data from multiple sources",
   version: "1.0.0",
@@ -20,7 +24,7 @@ const sampleWorkflow: Workflow = {
       id: "node-1",
       name: "Data Extraction",
       type: "trigger",
-      status: "success",
+      status: "idle",
       position: { x: 100, y: 100 },
       config: {
         source: "api",
@@ -38,7 +42,7 @@ const sampleWorkflow: Workflow = {
       id: "node-2",
       name: "Data Validation",
       type: "task",
-      status: "success",
+      status: "idle",
       position: { x: 300, y: 100 },
       config: {
         schema: {
@@ -58,7 +62,7 @@ const sampleWorkflow: Workflow = {
       id: "node-3",
       name: "Data Transformation",
       type: "task",
-      status: "running",
+      status: "idle",
       position: { x: 500, y: 100 },
       config: {
         transformations: [
@@ -73,7 +77,7 @@ const sampleWorkflow: Workflow = {
       id: "node-4",
       name: "Quality Check",
       type: "decision",
-      status: "pending",
+      status: "idle",
       position: { x: 700, y: 100 },
       config: {
         condition: "data.quality > 0.8"
@@ -137,17 +141,50 @@ const sampleWorkflow: Workflow = {
     cron: "0 0 * * *"
   },
   tags: ["data", "etl", "production"],
-  createdAt: "2023-01-01T00:00:00Z",
-  updatedAt: "2023-01-15T00:00:00Z",
-  lastRunAt: "2023-01-15T00:00:00Z",
-  status: "running"
+  lastRunAt: undefined,
+  status: "inactive"
 };
 
 const Index = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [currentWorkflow, setCurrentWorkflow] = useState<Workflow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [activeTab, setActiveTab] = useState("canvas");
   
-  const selectedNode = selectedNodeId 
-    ? sampleWorkflow.nodes.find(node => node.id === selectedNodeId) || null
+  // Load workflows from Supabase
+  useEffect(() => {
+    const loadWorkflows = async () => {
+      try {
+        const data = await fetchWorkflows();
+        setWorkflows(data);
+        
+        // Set the first workflow as current if available
+        if (data.length > 0) {
+          setCurrentWorkflow(data[0]);
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading workflows:", error);
+        toast.error("Failed to load workflows");
+        setLoading(false);
+      }
+    };
+    
+    loadWorkflows();
+  }, []);
+  
+  // Update loading state when current workflow changes
+  useEffect(() => {
+    if (currentWorkflow) {
+      setLoading(false);
+    }
+  }, [currentWorkflow]);
+  
+  const selectedNode = currentWorkflow && selectedNodeId 
+    ? currentWorkflow.nodes.find(node => node.id === selectedNodeId) || null
     : null;
 
   const handleNodeClick = (nodeId: string) => {
@@ -157,64 +194,202 @@ const Index = () => {
   const handleCanvasClick = () => {
     setSelectedNodeId(null);
   };
+  
+  const handleWorkflowUpdate = (updatedWorkflow: Workflow) => {
+    setCurrentWorkflow(updatedWorkflow);
+    
+    // Also update the workflow in the list
+    setWorkflows(prevWorkflows => 
+      prevWorkflows.map(wf => 
+        wf.id === updatedWorkflow.id ? updatedWorkflow : wf
+      )
+    );
+  };
+  
+  const handleCreateWorkflow = async () => {
+    try {
+      setCreating(true);
+      const newWorkflow = await createWorkflow(sampleWorkflow);
+      
+      if (newWorkflow) {
+        setWorkflows(prev => [newWorkflow, ...prev]);
+        setCurrentWorkflow(newWorkflow);
+        toast.success("New workflow created");
+      }
+    } catch (error) {
+      console.error("Error creating workflow:", error);
+      toast.error("Failed to create workflow");
+    } finally {
+      setCreating(false);
+    }
+  };
+  
+  const handleWorkflowSelect = (workflow: Workflow) => {
+    setCurrentWorkflow(workflow);
+    setSelectedNodeId(null);
+    setActiveTab("canvas");
+  };
+  
+  const handleWorkflowDelete = (id: string) => {
+    setWorkflows(prev => prev.filter(wf => wf.id !== id));
+    
+    // If the deleted workflow is the current one, select another one
+    if (currentWorkflow?.id === id) {
+      const nextWorkflow = workflows.find(wf => wf.id !== id);
+      setCurrentWorkflow(nextWorkflow || null);
+      setSelectedNodeId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen flex-col">
+        <Header />
+        <div className="flex flex-1 overflow-hidden">
+          <SidebarNav />
+          <main className="flex-1 overflow-hidden flex flex-col items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="mt-2 text-muted-foreground">Loading workflows...</p>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <SidebarNav />
+        <div className="w-80 border-r overflow-y-auto">
+          <WorkflowList 
+            workflows={workflows}
+            onWorkflowSelect={handleWorkflowSelect}
+            onWorkflowDelete={handleWorkflowDelete}
+            onCreateWorkflow={handleCreateWorkflow}
+            selectedWorkflowId={currentWorkflow?.id}
+            isCreating={creating}
+          />
+        </div>
         <main className="flex-1 overflow-hidden flex flex-col">
-          <div className="border-b bg-background p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-xl font-semibold">{sampleWorkflow.name}</h1>
-                <p className="text-sm text-muted-foreground">{sampleWorkflow.description}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>Last run: 15 Jan 2023, 00:00</span>
-                </div>
-                <Button variant="outline" size="sm" className="gap-1">
-                  <Plus className="h-4 w-4" />
-                  <span>Add Node</span>
-                </Button>
-                <Button size="sm" className="gap-1">
-                  <Play className="h-4 w-4" />
-                  <span>Run Workflow</span>
+          {!currentWorkflow ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center max-w-md mx-auto p-6">
+                <h2 className="text-2xl font-bold mb-2">No workflows found</h2>
+                <p className="text-muted-foreground mb-6">
+                  Create your first workflow to get started with FlowForge.
+                </p>
+                <Button 
+                  onClick={handleCreateWorkflow} 
+                  disabled={creating}
+                  className="gap-2"
+                >
+                  {creating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  <span>Create Sample Workflow</span>
                 </Button>
               </div>
             </div>
-            <div className="flex items-center gap-2 mt-4">
-              {sampleWorkflow.tags?.map((tag) => (
-                <div key={tag} className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs">
-                  {tag}
+          ) : (
+            <>
+              <div className="border-b bg-background p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-xl font-semibold">{currentWorkflow.name}</h1>
+                    <p className="text-sm text-muted-foreground">{currentWorkflow.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {currentWorkflow.lastRunAt && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>Last run: {new Date(currentWorkflow.lastRunAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="gap-1"
+                      onClick={handleCreateWorkflow}
+                      disabled={creating}
+                    >
+                      {creating ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      <span>New Workflow</span>
+                    </Button>
+                  </div>
                 </div>
-              ))}
-              <div className="bg-blue-100 text-blue-500 dark:bg-blue-900/20 dark:text-blue-400 px-2 py-0.5 rounded text-xs">
-                v{sampleWorkflow.version}
+                <div className="flex items-center gap-2 mt-4">
+                  {currentWorkflow.tags?.map((tag) => (
+                    <div key={tag} className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs">
+                      {tag}
+                    </div>
+                  ))}
+                  <div className="bg-blue-100 text-blue-500 dark:bg-blue-900/20 dark:text-blue-400 px-2 py-0.5 rounded text-xs">
+                    v{currentWorkflow.version}
+                  </div>
+                  <div className={`px-2 py-0.5 rounded text-xs flex items-center gap-1
+                    ${currentWorkflow.status === 'running' ? 'bg-green-100 text-green-500 dark:bg-green-900/20 dark:text-green-400' : 
+                     currentWorkflow.status === 'failed' ? 'bg-red-100 text-red-500 dark:bg-red-900/20 dark:text-red-400' :
+                     'bg-gray-100 text-gray-500 dark:bg-gray-900/20 dark:text-gray-400'}`}
+                  >
+                    {currentWorkflow.status === 'running' && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    )}
+                    {currentWorkflow.status === 'failed' && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                    )}
+                    {currentWorkflow.status === 'inactive' && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-500"></span>
+                    )}
+                    {currentWorkflow.status.charAt(0).toUpperCase() + currentWorkflow.status.slice(1)}
+                  </div>
+                </div>
+                
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+                  <TabsList>
+                    <TabsTrigger value="canvas" className="flex items-center gap-1">
+                      <LayoutGrid className="h-4 w-4" />
+                      <span>Canvas</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="runs" className="flex items-center gap-1">
+                      <List className="h-4 w-4" />
+                      <span>Execution History</span>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
-              <div className="bg-green-100 text-green-500 dark:bg-green-900/20 dark:text-green-400 px-2 py-0.5 rounded text-xs flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                Running
+              
+              <div className="flex-1 overflow-hidden">
+                <TabsContent value="canvas" className="h-full m-0 p-0">
+                  <div className="flex h-full">
+                    <ReactFlowProvider>
+                      <WorkflowCanvas 
+                        workflow={currentWorkflow} 
+                        onNodeClick={handleNodeClick}
+                        onCanvasClick={handleCanvasClick}
+                        onWorkflowUpdate={handleWorkflowUpdate}
+                      />
+                    </ReactFlowProvider>
+                    {selectedNode && (
+                      <MonitoringPanel 
+                        selectedNode={selectedNode} 
+                        onClose={() => setSelectedNodeId(null)} 
+                      />
+                    )}
+                  </div>
+                </TabsContent>
+                <TabsContent value="runs" className="h-full m-0 p-4 overflow-y-auto">
+                  <WorkflowRunsList workflowId={currentWorkflow.id} />
+                </TabsContent>
               </div>
-            </div>
-          </div>
-          <div className="flex-1 overflow-hidden flex">
-            <ReactFlowProvider>
-              <WorkflowCanvas 
-                workflow={sampleWorkflow} 
-                onNodeClick={handleNodeClick}
-                onCanvasClick={handleCanvasClick}
-              />
-            </ReactFlowProvider>
-            {selectedNode && (
-              <MonitoringPanel 
-                selectedNode={selectedNode} 
-                onClose={() => setSelectedNodeId(null)} 
-              />
-            )}
-          </div>
+            </>
+          )}
         </main>
       </div>
     </div>
