@@ -1,5 +1,6 @@
 
 import { useState } from "react";
+import { ReactFlowProvider } from "reactflow";
 import { Workflow, WorkflowNode } from "@/lib/types";
 import Header from "@/components/Header";
 import SidebarNav from "@/components/Sidebar";
@@ -200,11 +201,13 @@ const Index = () => {
             </div>
           </div>
           <div className="flex-1 overflow-hidden flex">
-            <WorkflowCanvas 
-              workflow={sampleWorkflow} 
-              onNodeClick={handleNodeClick}
-              onCanvasClick={handleCanvasClick}
-            />
+            <ReactFlowProvider>
+              <WorkflowCanvas 
+                workflow={sampleWorkflow} 
+                onNodeClick={handleNodeClick}
+                onCanvasClick={handleCanvasClick}
+              />
+            </ReactFlowProvider>
             {selectedNode && (
               <MonitoringPanel 
                 selectedNode={selectedNode} 

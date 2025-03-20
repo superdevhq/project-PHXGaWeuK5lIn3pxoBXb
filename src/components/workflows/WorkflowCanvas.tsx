@@ -1,11 +1,23 @@
 
-import { useState, useRef, useEffect } from "react";
-import { Plus, ZoomIn, ZoomOut, MousePointer, Maximize2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import ReactFlow, {
+  Background,
+  Controls,
+  Edge,
+  MiniMap,
+  Node,
+  NodeTypes,
+  Panel,
+  useEdgesState,
+  useNodesState,
+  useReactFlow,
+} from "reactflow";
+import "reactflow/dist/style.css";
+import { Workflow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Workflow, WorkflowNode as WorkflowNodeType } from "@/lib/types";
-import WorkflowNode from "./WorkflowNode";
-import WorkflowEdge from "./WorkflowEdge";
-import { cn } from "@/lib/utils";
+import { Plus, Play, Save } from "lucide-react";
+import CustomNode from "./CustomNode";
+import CustomEdge from "./CustomEdge";
 
 interface WorkflowCanvasProps {
   workflow: Workflow;
@@ -13,249 +25,161 @@ interface WorkflowCanvasProps {
   onCanvasClick: () => void;
 }
 
+// Define custom node types
+const nodeTypes: NodeTypes = {
+  customNode: CustomNode,
+};
+
+// Define custom edge types
+const edgeTypes = {
+  customEdge: CustomEdge,
+};
+
 const WorkflowCanvas = ({ workflow, onNodeClick, onCanvasClick }: WorkflowCanvasProps) => {
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [dragNodeId, setDragNodeId] = useState<string | null>(null);
-  const [tool, setTool] = useState<"select" | "pan" | "add">("select");
-  
-  const canvasRef = useRef<HTMLDivElement>(null);
+  // Convert workflow data to React Flow format
+  const initialNodes: Node[] = useMemo(() => {
+    return workflow.nodes.map((node) => ({
+      id: node.id,
+      type: "customNode",
+      position: node.position,
+      data: { ...node, onNodeClick },
+      draggable: true,
+    }));
+  }, [workflow.nodes, onNodeClick]);
 
-  // Handle canvas dragging for panning
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (tool === "pan") {
-      setDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
-    }
-  };
+  const initialEdges: Edge[] = useMemo(() => {
+    return workflow.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: "customEdge",
+      data: {
+        condition: edge.condition,
+        status: workflow.nodes.find((n) => n.id === edge.source)?.status,
+      },
+      animated: workflow.nodes.find((n) => n.id === edge.source)?.status === "running",
+    }));
+  }, [workflow.edges, workflow.nodes]);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (dragging && tool === "pan") {
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
-      setPosition({
-        x: position.x + dx,
-        y: position.y + dy,
-      });
-      setDragStart({ x: e.clientX, y: e.clientY });
-    }
-  };
+  // React Flow state
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const reactFlowInstance = useReactFlow();
 
-  const handleMouseUp = () => {
-    setDragging(false);
-  };
+  // Handle node selection
+  const handleNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.stopPropagation();
+      setSelectedNode(node.id);
+      onNodeClick(node.id);
+    },
+    [onNodeClick]
+  );
 
-  // Handle node dragging
-  const handleNodeDragStart = (nodeId: string, e: React.DragEvent) => {
-    e.stopPropagation();
-    setDragNodeId(nodeId);
-    e.dataTransfer.setData("text/plain", nodeId);
-    // Use a transparent image as drag ghost
-    const img = new Image();
-    img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-    e.dataTransfer.setDragImage(img, 0, 0);
-  };
+  // Handle canvas click to deselect
+  const handlePaneClick = useCallback(() => {
+    setSelectedNode(null);
+    onCanvasClick();
+  }, [onCanvasClick]);
 
-  const handleNodeDragEnd = (e: React.DragEvent) => {
-    e.stopPropagation();
-    setDragNodeId(null);
-  };
+  // Handle node position changes
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      console.log(`Node ${node.id} moved to position:`, node.position);
+      // Here you would update your workflow data with the new position
+    },
+    []
+  );
 
-  const handleCanvasDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  // Add a new node
+  const addNode = useCallback(() => {
+    const newNode: Node = {
+      id: `node-${nodes.length + 1}`,
+      type: "customNode",
+      position: {
+        x: Math.random() * 300 + 50,
+        y: Math.random() * 300 + 50,
+      },
+      data: {
+        id: `node-${nodes.length + 1}`,
+        name: "New Task",
+        type: "task",
+        status: "idle",
+        config: {},
+        dependencies: [],
+        description: "New task description",
+        onNodeClick,
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [nodes.length, onNodeClick, setNodes]);
 
-  const handleCanvasDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (dragNodeId) {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (rect) {
-        const x = (e.clientX - rect.left) / scale - position.x;
-        const y = (e.clientY - rect.top) / scale - position.y;
-        
-        // Update node position logic would go here
-        console.log(`Move node ${dragNodeId} to ${x}, ${y}`);
-      }
-    }
-  };
+  // Save workflow
+  const saveWorkflow = useCallback(() => {
+    const updatedWorkflow = {
+      ...workflow,
+      nodes: nodes.map((node) => ({
+        ...node.data,
+        position: node.position,
+      })),
+      edges: edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        condition: edge.data?.condition,
+      })),
+    };
+    console.log("Saving workflow:", updatedWorkflow);
+    // Here you would save the workflow to your backend
+  }, [workflow, nodes, edges]);
 
-  // Zoom controls
-  const handleZoomIn = () => {
-    setScale(Math.min(scale + 0.1, 2));
-  };
-
-  const handleZoomOut = () => {
-    setScale(Math.max(scale - 0.1, 0.5));
-  };
-
-  const handleZoomReset = () => {
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
-  };
-
-  // Get node positions for edges
-  const getNodePosition = (nodeId: string): { x: number; y: number } => {
-    const node = workflow.nodes.find((n) => n.id === nodeId);
-    return node ? node.position : { x: 0, y: 0 };
-  };
-
-  // Log for debugging
-  useEffect(() => {
-    console.log("Workflow nodes:", workflow.nodes);
-  }, [workflow]);
+  // Run workflow
+  const runWorkflow = useCallback(() => {
+    console.log("Running workflow:", workflow.id);
+    // Here you would trigger the workflow execution
+  }, [workflow.id]);
 
   return (
-    <div className="relative flex-1 overflow-hidden border rounded-lg bg-slate-50 dark:bg-slate-900/50">
-      {/* Canvas controls */}
-      <div className="absolute top-4 left-4 z-20 flex gap-2">
-        <div className="bg-background/80 backdrop-blur-sm rounded-lg border shadow-sm flex">
-          <Button
-            variant={tool === "select" ? "default" : "ghost"}
-            size="icon"
-            onClick={() => setTool("select")}
-            className="h-8 w-8 rounded-r-none"
-          >
-            <MousePointer className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={tool === "pan" ? "default" : "ghost"}
-            size="icon"
-            onClick={() => setTool("pan")}
-            className="h-8 w-8 rounded-none"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" transform="rotate(45 12 12)" />
-            </svg>
-          </Button>
-          <Button
-            variant={tool === "add" ? "default" : "ghost"}
-            size="icon"
-            onClick={() => setTool("add")}
-            className="h-8 w-8 rounded-l-none"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="absolute top-4 right-4 z-20 flex gap-2">
-        <div className="bg-background/80 backdrop-blur-sm rounded-lg border shadow-sm flex">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleZoomOut}
-            className="h-8 w-8 rounded-r-none"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleZoomReset}
-            className="h-8 px-2 rounded-none"
-          >
-            {Math.round(scale * 100)}%
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleZoomIn}
-            className="h-8 w-8 rounded-l-none"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleZoomReset}
-          className="h-8 w-8 bg-background/80 backdrop-blur-sm border shadow-sm"
-        >
-          <Maximize2 className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Canvas */}
-      <div
-        ref={canvasRef}
-        className={cn(
-          "h-full w-full",
-          tool === "pan" ? "cursor-grab" : "cursor-default",
-          dragging && "cursor-grabbing"
-        )}
-        onClick={onCanvasClick}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onDragOver={handleCanvasDragOver}
-        onDrop={handleCanvasDrop}
+    <div className="flex-1 h-full w-full">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={handleNodeClick}
+        onPaneClick={handlePaneClick}
+        onNodeDragStop={onNodeDragStop}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        fitView
+        attributionPosition="bottom-right"
+        minZoom={0.2}
+        maxZoom={2}
       >
-        <div
-          className="absolute h-full w-full"
-          style={{
-            transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
-            transformOrigin: "0 0",
-          }}
-        >
-          {/* Grid background */}
-          <div className="absolute inset-0 grid grid-cols-[repeat(50,minmax(50px,1fr))] grid-rows-[repeat(50,minmax(50px,1fr))]">
-            {Array.from({ length: 50 * 50 }).map((_, i) => (
-              <div
-                key={i}
-                className="border-r border-b border-slate-200 dark:border-slate-800/50"
-              />
-            ))}
-          </div>
-
-          {/* SVG for edges */}
-          <svg className="absolute inset-0 h-full w-full pointer-events-none">
-            <defs>
-              <marker
-                id="arrowhead"
-                markerWidth="10"
-                markerHeight="7"
-                refX="0"
-                refY="3.5"
-                orient="auto"
-              >
-                <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" />
-              </marker>
-            </defs>
-            {workflow.edges.map((edge) => (
-              <WorkflowEdge
-                key={edge.id}
-                edge={edge}
-                sourcePosition={getNodePosition(edge.source)}
-                targetPosition={getNodePosition(edge.target)}
-                status={
-                  workflow.nodes.find((n) => n.id === edge.source)?.status === "running" 
-                    ? "active" 
-                    : workflow.nodes.find((n) => n.id === edge.source)?.status === "success"
-                    ? "success"
-                    : workflow.nodes.find((n) => n.id === edge.source)?.status === "failed"
-                    ? "failed"
-                    : "idle"
-                }
-              />
-            ))}
-          </svg>
-
-          {/* Nodes */}
-          {workflow.nodes.map((node) => (
-            <WorkflowNode
-              key={node.id}
-              node={node}
-              onNodeClick={onNodeClick}
-              onNodeDragStart={handleNodeDragStart}
-              onNodeDragEnd={handleNodeDragEnd}
-            />
-          ))}
-        </div>
-      </div>
+        <Background color="#aaa" gap={16} />
+        <Controls />
+        <MiniMap 
+          nodeStrokeWidth={3}
+          zoomable
+          pannable
+          className="bg-background/80 backdrop-blur-sm border rounded-lg"
+        />
+        <Panel position="top-left" className="flex gap-2">
+          <Button size="sm" onClick={addNode} className="gap-1">
+            <Plus className="h-4 w-4" />
+            <span>Add Node</span>
+          </Button>
+          <Button size="sm" onClick={runWorkflow} variant="default" className="gap-1">
+            <Play className="h-4 w-4" />
+            <span>Run</span>
+          </Button>
+          <Button size="sm" onClick={saveWorkflow} variant="outline" className="gap-1">
+            <Save className="h-4 w-4" />
+            <span>Save</span>
+          </Button>
+        </Panel>
+      </ReactFlow>
     </div>
   );
 };
