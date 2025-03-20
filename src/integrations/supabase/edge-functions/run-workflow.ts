@@ -184,6 +184,10 @@ async function executeWorkflow(supabase: any, workflowId: string, runId: string)
       await processNode(supabase, workflow, node, nodeRuns, runId);
     }
     
+    // MODIFICATION: Always insert data into processed_data table
+    // This ensures data is stored regardless of workflow path
+    await insertProcessedData(supabase, nodeRuns, runId);
+    
     // Determine overall status
     const failedNodes = nodeRuns.filter(nr => nr.status === 'failed');
     const overallStatus = failedNodes.length > 0 ? 'failed' : 'success';
@@ -244,6 +248,79 @@ async function executeWorkflow(supabase: any, workflowId: string, runId: string)
       .eq('id', workflowId);
     
     throw error;
+  }
+}
+
+// NEW FUNCTION: Always insert data into processed_data table
+async function insertProcessedData(supabase: any, nodeRuns: NodeRun[], runId: string) {
+  console.log('Ensuring data is inserted into processed_data table');
+  
+  try {
+    // Find the data extraction node (trigger node)
+    const extractionNode = nodeRuns.find(nr => 
+      nr.output && nr.output.data && Array.isArray(nr.output.data)
+    );
+    
+    if (!extractionNode || !extractionNode.output || !extractionNode.output.data) {
+      console.log('No data found to insert');
+      return;
+    }
+    
+    // Get the data and quality
+    const data = extractionNode.output.data;
+    
+    // Find the quality from any node that has it
+    let quality = 0.5; // Default quality
+    for (const nodeRun of nodeRuns) {
+      if (nodeRun.output && nodeRun.output.quality !== undefined) {
+        quality = nodeRun.output.quality;
+        break;
+      }
+    }
+    
+    // Find the transformation node to get transformed data if available
+    const transformationNode = nodeRuns.find(nr => 
+      nr.nodeId.includes('transform') || (nr.output && nr.output.metrics && nr.output.metrics.transformationCount)
+    );
+    
+    // Use transformed data if available, otherwise use original data
+    const finalData = (transformationNode && transformationNode.output && 
+                      transformationNode.output.data && 
+                      transformationNode.output.data.length > 0) 
+                      ? transformationNode.output.data 
+                      : data;
+    
+    // Prepare records to insert
+    const recordsToInsert = finalData.map((item: any) => ({
+      external_id: item.id,
+      name: item.name,
+      value: item.value,
+      category: item.category,
+      quality: quality,
+      processed_at: new Date().toISOString(),
+      workflow_run_id: runId
+    }));
+    
+    if (recordsToInsert.length === 0) {
+      console.log('No records to insert');
+      return;
+    }
+    
+    console.log(`Inserting ${recordsToInsert.length} records into processed_data:`, recordsToInsert);
+    
+    const { error } = await supabase
+      .from('processed_data')
+      .insert(recordsToInsert);
+    
+    if (error) {
+      console.error('Error inserting data:', error);
+      throw new Error(`Error inserting data: ${error.message}`);
+    }
+    
+    console.log(`Successfully inserted ${recordsToInsert.length} records into processed_data`);
+  } catch (error) {
+    console.error('Error in insertProcessedData:', error);
+    // We don't throw the error here to allow the workflow to continue
   }
 }
 
