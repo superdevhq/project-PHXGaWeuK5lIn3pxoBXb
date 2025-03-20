@@ -9,6 +9,53 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      processed_data: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          external_id: string
+          id: number
+          name: string
+          processed_at: string | null
+          quality: number | null
+          updated_at: string | null
+          value: number | null
+          workflow_run_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          external_id: string
+          id?: never
+          name: string
+          processed_at?: string | null
+          quality?: number | null
+          updated_at?: string | null
+          value?: number | null
+          workflow_run_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          external_id?: string
+          id?: never
+          name?: string
+          processed_at?: string | null
+          quality?: number | null
+          updated_at?: string | null
+          value?: number | null
+          workflow_run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processed_data_workflow_run_id_fkey"
+            columns: ["workflow_run_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_runs: {
         Row: {
           created_at: string
