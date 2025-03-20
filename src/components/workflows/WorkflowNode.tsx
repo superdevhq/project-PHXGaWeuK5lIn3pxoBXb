@@ -122,8 +122,12 @@ const WorkflowNode = ({ node, onNodeClick, onNodeDragStart, onNodeDragEnd }: Wor
       style={{
         left: `${node.position.x}px`,
         top: `${node.position.y}px`,
+        zIndex: 10
       }}
-      onClick={() => onNodeClick(node.id)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onNodeClick(node.id);
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       draggable

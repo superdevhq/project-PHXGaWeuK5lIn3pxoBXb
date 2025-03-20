@@ -101,10 +101,15 @@ const WorkflowCanvas = ({ workflow, onNodeClick, onCanvasClick }: WorkflowCanvas
     return node ? node.position : { x: 0, y: 0 };
   };
 
+  // Log for debugging
+  useEffect(() => {
+    console.log("Workflow nodes:", workflow.nodes);
+  }, [workflow]);
+
   return (
     <div className="relative flex-1 overflow-hidden border rounded-lg bg-slate-50 dark:bg-slate-900/50">
       {/* Canvas controls */}
-      <div className="absolute top-4 left-4 z-10 flex gap-2">
+      <div className="absolute top-4 left-4 z-20 flex gap-2">
         <div className="bg-background/80 backdrop-blur-sm rounded-lg border shadow-sm flex">
           <Button
             variant={tool === "select" ? "default" : "ghost"}
@@ -136,7 +141,7 @@ const WorkflowCanvas = ({ workflow, onNodeClick, onCanvasClick }: WorkflowCanvas
         </div>
       </div>
 
-      <div className="absolute top-4 right-4 z-10 flex gap-2">
+      <div className="absolute top-4 right-4 z-20 flex gap-2">
         <div className="bg-background/80 backdrop-blur-sm rounded-lg border shadow-sm flex">
           <Button
             variant="ghost"
