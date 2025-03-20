@@ -152,36 +152,30 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState("canvas");
-  
+
   // Load workflows from Supabase
   useEffect(() => {
     const loadWorkflows = async () => {
       try {
+        setLoading(true);
         const data = await fetchWorkflows();
+        console.log("Fetched workflows:", data);
         setWorkflows(data);
         
         // Set the first workflow as current if available
         if (data.length > 0) {
           setCurrentWorkflow(data[0]);
-        } else {
-          setLoading(false);
         }
       } catch (error) {
         console.error("Error loading workflows:", error);
         toast.error("Failed to load workflows");
+      } finally {
         setLoading(false);
       }
     };
     
     loadWorkflows();
   }, []);
-  
-  // Update loading state when current workflow changes
-  useEffect(() => {
-    if (currentWorkflow) {
-      setLoading(false);
-    }
-  }, [currentWorkflow]);
   
   const selectedNode = currentWorkflow && selectedNodeId 
     ? currentWorkflow.nodes.find(node => node.id === selectedNodeId) || null
@@ -209,22 +203,28 @@ const Index = () => {
   const handleCreateWorkflow = async () => {
     try {
       setCreating(true);
+      console.log("Creating workflow with data:", sampleWorkflow);
       const newWorkflow = await createWorkflow(sampleWorkflow);
       
       if (newWorkflow) {
+        console.log("New workflow created:", newWorkflow);
         setWorkflows(prev => [newWorkflow, ...prev]);
         setCurrentWorkflow(newWorkflow);
+        setActiveTab("canvas");
         toast.success("New workflow created");
+      } else {
+        toast.error("Failed to create workflow - no data returned");
       }
     } catch (error) {
       console.error("Error creating workflow:", error);
-      toast.error("Failed to create workflow");
+      toast.error(`Failed to create workflow: ${error.message || "Unknown error"}`);
     } finally {
       setCreating(false);
     }
   };
   
   const handleWorkflowSelect = (workflow: Workflow) => {
+    console.log("Selected workflow:", workflow);
     setCurrentWorkflow(workflow);
     setSelectedNodeId(null);
     setActiveTab("canvas");
@@ -350,43 +350,49 @@ const Index = () => {
                     {currentWorkflow.status.charAt(0).toUpperCase() + currentWorkflow.status.slice(1)}
                   </div>
                 </div>
-                
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                  <TabsList>
-                    <TabsTrigger value="canvas" className="flex items-center gap-1">
-                      <LayoutGrid className="h-4 w-4" />
-                      <span>Canvas</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="runs" className="flex items-center gap-1">
-                      <List className="h-4 w-4" />
-                      <span>Execution History</span>
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
+
+                <div className="mt-4">
+                  <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <TabsList>
+                      <TabsTrigger value="canvas" className="flex items-center gap-1">
+                        <LayoutGrid className="h-4 w-4" />
+                        <span>Canvas</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="runs" className="flex items-center gap-1">
+                        <List className="h-4 w-4" />
+                        <span>Execution History</span>
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
               </div>
               
               <div className="flex-1 overflow-hidden">
-                <TabsContent value="canvas" className="h-full m-0 p-0">
-                  <div className="flex h-full">
-                    <ReactFlowProvider>
-                      <WorkflowCanvas 
-                        workflow={currentWorkflow} 
-                        onNodeClick={handleNodeClick}
-                        onCanvasClick={handleCanvasClick}
-                        onWorkflowUpdate={handleWorkflowUpdate}
-                      />
-                    </ReactFlowProvider>
-                    {selectedNode && (
-                      <MonitoringPanel 
-                        selectedNode={selectedNode} 
-                        onClose={() => setSelectedNodeId(null)} 
-                      />
-                    )}
+                {activeTab === "canvas" && (
+                  <div className="h-full">
+                    <div className="flex h-full">
+                      <ReactFlowProvider>
+                        <WorkflowCanvas 
+                          workflow={currentWorkflow} 
+                          onNodeClick={handleNodeClick}
+                          onCanvasClick={handleCanvasClick}
+                          onWorkflowUpdate={handleWorkflowUpdate}
+                        />
+                      </ReactFlowProvider>
+                      {selectedNode && (
+                        <MonitoringPanel 
+                          selectedNode={selectedNode} 
+                          onClose={() => setSelectedNodeId(null)} 
+                        />
+                      )}
+                    </div>
                   </div>
-                </TabsContent>
-                <TabsContent value="runs" className="h-full m-0 p-4 overflow-y-auto">
-                  <WorkflowRunsList workflowId={currentWorkflow.id} />
-                </TabsContent>
+                )}
+                {activeTab === "runs" && (
+                  <div className="h-full p-4 overflow-y-auto">
+                    <WorkflowRunsList workflowId={currentWorkflow.id} />
+                  </div>
+                )}
               </div>
             </>
           )}
